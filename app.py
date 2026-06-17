@@ -62,7 +62,7 @@ with st.sidebar:
 
     st.header("3. 모델 선택")
     _default_models = [
-        m for m in ["Z-Score", "Isolation Forest", "LSTM-Autoencoder"]
+        m for m in ["Z-Score", "Isolation Forest", "Rolling Z-Score"]
         if m in ALL_DETECTORS
     ]
     selected_models = st.multiselect(
@@ -70,14 +70,10 @@ with st.sidebar:
         list(ALL_DETECTORS.keys()),
         default=_default_models,
     )
-    if "LSTM-Autoencoder" not in ALL_DETECTORS:
-        st.caption("ℹ️ PyTorch 미설치 환경 — LSTM-Autoencoder는 비활성화됨")
     contamination = st.slider("이상 비율 (threshold 분위수)", 0.01, 0.20, 0.05, 0.01)
 
     with st.expander("고급 설정"):
         rolling_window = st.slider("Rolling Z 윈도우", 5, 200, 30)
-        lstm_window = st.slider("LSTM 윈도우", 5, 100, 20)
-        lstm_epochs = st.slider("LSTM 에폭", 5, 100, 20)
 
     run_button = st.button("🚀 이상탐지 실행", type="primary", use_container_width=True)
 
@@ -128,8 +124,6 @@ def _run(
     selected_models: tuple,
     contamination: float,
     rolling_window: int,
-    lstm_window: int,
-    lstm_epochs: int,
     _df: pd.DataFrame,
 ):
     X_raw = _df[list(numeric_cols)]
@@ -146,9 +140,6 @@ def _run(
         kwargs: dict = {"contamination": contamination}
         if name == "Rolling Z-Score":
             kwargs["window"] = rolling_window
-        if name == "LSTM-Autoencoder":
-            kwargs["window"] = lstm_window
-            kwargs["epochs"] = lstm_epochs
         det = cls(**kwargs)
         result = det.detect(X)
         scores_by_model[name] = result.scores
@@ -173,8 +164,6 @@ if "results" not in st.session_state or run_button:
             tuple(selected_models),
             contamination,
             rolling_window,
-            lstm_window,
-            lstm_epochs,
             data.df,
         )
     st.session_state["results"] = (X, scores_by_model, preds_by_model, thresholds)

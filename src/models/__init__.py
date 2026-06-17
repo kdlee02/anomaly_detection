@@ -11,16 +11,6 @@ ALL_DETECTORS = {
     "One-Class SVM": OCSVMDetector,
 }
 
-# LSTM-Autoencoder requires PyTorch, which may be unavailable in some deploy
-# environments (e.g. limited-memory hosts). Register it only if torch imports.
-try:
-    from .dl import LSTMAutoencoderDetector
-
-    ALL_DETECTORS["LSTM-Autoencoder"] = LSTMAutoencoderDetector
-    TORCH_AVAILABLE = True
-except Exception:  # pragma: no cover - torch missing / failed to load
-    TORCH_AVAILABLE = False
-
 __all__ = [
     "AnomalyDetector",
     "DetectionResult",

@@ -8,7 +8,6 @@
 - **다중 모델 앙상블 비교**
   - 통계 기반: Z-Score, IQR, Rolling Z-Score
   - ML 기반: Isolation Forest, LOF, One-Class SVM
-  - 딥러닝: LSTM-Autoencoder (PyTorch, CPU) — *로컬 전용, 클라우드 배포에서는 비활성화*
 - **전처리 옵션**: 결측치 처리 (ffill/interpolate/zero/drop), 변환 (diff/log-return), 정규화 (Standard/Robust/MinMax)
 - **5개 탭 대시보드**
   1. Overview — 시계열 + 이상점 오버레이
@@ -22,9 +21,7 @@
 
 ```bash
 cd anomaly_detection
-pip install -r requirements.txt          # 기본 6개 모델
-# LSTM-Autoencoder까지 쓰려면:
-# pip install -r requirements-local.txt   # + PyTorch
+pip install -r requirements.txt
 streamlit run app.py
 ```
 
@@ -39,7 +36,7 @@ anomaly_detection/
 ├── .streamlit/config.toml
 ├── src/
 │   ├── data/                    # CSV 로더, 전처리
-│   ├── models/                  # 통계/ML/DL 이상탐지기
+│   ├── models/                  # 통계/ML 이상탐지기
 │   ├── evaluation/              # 평가 지표
 │   └── viz/                     # Plotly 시각화
 ├── samples/                     # 데모용 합성 데이터 (라벨 있/없음)
