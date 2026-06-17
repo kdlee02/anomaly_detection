@@ -1,10 +1,10 @@
 from .base import AnomalyDetector, DetectionResult
-from .statistical import ZScoreDetector, IQRDetector, RollingZDetector
+from .statistical import ARIMADetector, STLDetector, RollingZDetector
 from .ml import IsolationForestDetector, LOFDetector, OCSVMDetector
 
 ALL_DETECTORS = {
-    "Z-Score": ZScoreDetector,
-    "IQR": IQRDetector,
+    "ARIMA": ARIMADetector,
+    "STL": STLDetector,
     "Rolling Z-Score": RollingZDetector,
     "Isolation Forest": IsolationForestDetector,
     "LOF": LOFDetector,

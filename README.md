@@ -6,7 +6,7 @@
 
 - **자동 스키마 감지**: 시간 컬럼, 수치형 컬럼, 라벨 컬럼(`label`, `anomaly`, `y` 등 0/1)을 자동 인식
 - **다중 모델 앙상블 비교**
-  - 통계 기반: Z-Score, IQR, Rolling Z-Score
+  - 통계 기반: ARIMA, STL, Rolling Z-Score
   - ML 기반: Isolation Forest, LOF, One-Class SVM
 - **전처리 옵션**: 결측치 처리 (ffill/interpolate/zero/drop), 변환 (diff/log-return), 정규화 (Standard/Robust/MinMax)
 - **5개 탭 대시보드**

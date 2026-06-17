@@ -62,7 +62,7 @@ with st.sidebar:
 
     st.header("3. 모델 선택")
     _default_models = [
-        m for m in ["Z-Score", "Isolation Forest", "Rolling Z-Score"]
+        m for m in ["STL", "Isolation Forest", "Rolling Z-Score"]
         if m in ALL_DETECTORS
     ]
     selected_models = st.multiselect(
@@ -74,6 +74,7 @@ with st.sidebar:
 
     with st.expander("고급 설정"):
         rolling_window = st.slider("Rolling Z 윈도우", 5, 200, 30)
+        seasonal_period = st.slider("STL 계절 주기", 2, 365, 24)
 
     run_button = st.button("🚀 이상탐지 실행", type="primary", use_container_width=True)
 
@@ -124,6 +125,7 @@ def _run(
     selected_models: tuple,
     contamination: float,
     rolling_window: int,
+    seasonal_period: int,
     _df: pd.DataFrame,
 ):
     X_raw = _df[list(numeric_cols)]
@@ -140,6 +142,8 @@ def _run(
         kwargs: dict = {"contamination": contamination}
         if name == "Rolling Z-Score":
             kwargs["window"] = rolling_window
+        if name == "STL":
+            kwargs["period"] = seasonal_period
         det = cls(**kwargs)
         result = det.detect(X)
         scores_by_model[name] = result.scores
@@ -164,6 +168,7 @@ if "results" not in st.session_state or run_button:
             tuple(selected_models),
             contamination,
             rolling_window,
+            seasonal_period,
             data.df,
         )
     st.session_state["results"] = (X, scores_by_model, preds_by_model, thresholds)
