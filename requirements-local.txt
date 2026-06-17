@@ -1,0 +1,4 @@
+# Local development: includes PyTorch for the LSTM-Autoencoder model.
+#   pip install -r requirements-local.txt
+-r requirements.txt
+torch>=2.2.0

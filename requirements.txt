@@ -1,0 +1,11 @@
+streamlit>=1.32.0
+pandas>=2.1.0
+numpy>=1.26.0,<2.0
+scikit-learn>=1.4.0
+scipy>=1.11.0
+plotly>=5.18.0
+pyarrow>=15.0.0
+
+# LSTM-Autoencoder (PyTorch) is optional and disabled in the cloud deploy to
+# keep the build light. For local use with the deep-learning model, also:
+#   pip install "torch>=2.2.0"
