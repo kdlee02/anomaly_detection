@@ -157,23 +157,22 @@ if not selected_models:
     st.warning("최소 1개 이상의 모델을 선택하세요.")
     st.stop()
 
-if "results" not in st.session_state or run_button:
-    with st.spinner("이상탐지 수행 중..."):
-        X, scores_by_model, preds_by_model, thresholds = _run(
-            data.file_hash,
-            tuple(data.numeric_cols),
-            fill_method,
-            value_transform,
-            scaling,
-            tuple(selected_models),
-            contamination,
-            rolling_window,
-            seasonal_period,
-            data.df,
-        )
-    st.session_state["results"] = (X, scores_by_model, preds_by_model, thresholds)
-
-X, scores_by_model, preds_by_model, thresholds = st.session_state["results"]
+# _run is cached by (file_hash + settings + selected_models), so this is cheap
+# when nothing changed and always returns results matching the current
+# selection — avoiding stale session_state keyed on a previous model set.
+with st.spinner("이상탐지 수행 중..."):
+    X, scores_by_model, preds_by_model, thresholds = _run(
+        data.file_hash,
+        tuple(data.numeric_cols),
+        fill_method,
+        value_transform,
+        scaling,
+        tuple(selected_models),
+        contamination,
+        rolling_window,
+        seasonal_period,
+        data.df,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
