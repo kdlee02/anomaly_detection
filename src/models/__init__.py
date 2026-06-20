@@ -1,6 +1,11 @@
 from .base import AnomalyDetector, DetectionResult
 from .statistical import ARIMADetector, STLDetector, RollingZDetector
-from .ml import IsolationForestDetector, LOFDetector, OCSVMDetector
+from .ml import (
+    IsolationForestDetector,
+    LOFDetector,
+    OCSVMDetector,
+    PCAReconstructionDetector,
+)
 
 ALL_DETECTORS = {
     "ARIMA": ARIMADetector,
@@ -9,6 +14,7 @@ ALL_DETECTORS = {
     "Isolation Forest": IsolationForestDetector,
     "LOF": LOFDetector,
     "One-Class SVM": OCSVMDetector,
+    "PCA Reconstruction": PCAReconstructionDetector,
 }
 
 __all__ = [

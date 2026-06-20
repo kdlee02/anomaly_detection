@@ -8,7 +8,10 @@ from plotly.subplots import make_subplots
 
 
 def timeseries_with_anomalies(
-    df: pd.DataFrame, predictions: pd.Series, title: str = "Time Series with Anomalies"
+    df: pd.DataFrame,
+    predictions: pd.Series,
+    title: str = "Time Series with Anomalies",
+    split_x=None,
 ) -> go.Figure:
     """Multi-feature time series with anomaly markers overlaid."""
     cols = list(df.columns)
@@ -32,11 +35,17 @@ def timeseries_with_anomalies(
                 ),
                 row=i, col=1,
             )
+    if split_x is not None:
+        fig.add_vline(x=split_x, line_dash="dash", line_color="green")
     fig.update_layout(height=200 * len(cols), title=title, hovermode="x unified")
     return fig
 
 
-def score_timeseries(scores_by_model: dict[str, pd.Series], thresholds: dict[str, float]) -> go.Figure:
+def score_timeseries(
+    scores_by_model: dict[str, pd.Series],
+    thresholds: dict[str, float],
+    split_x=None,
+) -> go.Figure:
     """Anomaly score time series per model with threshold lines."""
     fig = go.Figure()
     for name, s in scores_by_model.items():
@@ -44,6 +53,11 @@ def score_timeseries(scores_by_model: dict[str, pd.Series], thresholds: dict[str
         thr = thresholds.get(name)
         if thr is not None:
             fig.add_hline(y=thr, line_dash="dot", annotation_text=f"{name} thr", line_color="gray")
+    if split_x is not None:
+        # NB: no annotation_text here -- plotly's vline annotation placement
+        # averages the x-coords, which raises on a datetime axis (Timestamp +
+        # int). The divider line alone marks the train/detect boundary.
+        fig.add_vline(x=split_x, line_dash="dash", line_color="green")
     fig.update_layout(title="Anomaly Scores", hovermode="x unified", height=400)
     return fig
 

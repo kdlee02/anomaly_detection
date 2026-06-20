@@ -14,8 +14,45 @@ from sklearn.metrics import (
 )
 
 
+def _segments(y: np.ndarray) -> list[tuple[int, int]]:
+    """Return [start, end) index ranges of contiguous positive (==1) runs."""
+    segs = []
+    start = None
+    for i, v in enumerate(y):
+        if v == 1 and start is None:
+            start = i
+        elif v == 0 and start is not None:
+            segs.append((start, i))
+            start = None
+    if start is not None:
+        segs.append((start, len(y)))
+    return segs
+
+
+def point_adjust(y_true: np.ndarray, preds: np.ndarray) -> np.ndarray:
+    """Point-adjust predictions (Xu et al., 2018).
+
+    If *any* point inside a true anomaly segment is flagged, the whole segment
+    counts as detected. This is the standard correction for time-series
+    anomaly detection, where anomalies are events (ranges) rather than isolated
+    points and a single hit within an event should count as catching it.
+    """
+    adj = preds.copy()
+    for start, end in _segments(y_true):
+        if preds[start:end].any():
+            adj[start:end] = 1
+    return adj
+
+
+def event_counts(y_true: np.ndarray, preds: np.ndarray) -> dict:
+    """Count true events and how many were caught by at least one flagged point."""
+    segs = _segments(y_true)
+    detected = sum(1 for s, e in segs if preds[s:e].any())
+    return {"n_events": len(segs), "events_detected": detected}
+
+
 def supervised_metrics(y_true: pd.Series, scores: pd.Series, preds: pd.Series) -> dict:
-    """Compute precision/recall/F1/ROC-AUC/PR-AUC."""
+    """Compute point-wise and point-adjusted precision/recall/F1 + ROC/PR-AUC."""
     y = y_true.astype(int).values
     s = scores.values
     p = preds.astype(int).values
@@ -24,6 +61,13 @@ def supervised_metrics(y_true: pd.Series, scores: pd.Series, preds: pd.Series) -
         "recall": float(recall_score(y, p, zero_division=0)),
         "f1": float(f1_score(y, p, zero_division=0)),
     }
+    # point-adjusted variants (event-aware)
+    p_adj = point_adjust(y, p)
+    out["pa_precision"] = float(precision_score(y, p_adj, zero_division=0))
+    out["pa_recall"] = float(recall_score(y, p_adj, zero_division=0))
+    out["pa_f1"] = float(f1_score(y, p_adj, zero_division=0))
+    ev = event_counts(y, p)
+    out["events"] = f"{ev['events_detected']}/{ev['n_events']}"
     try:
         out["roc_auc"] = float(roc_auc_score(y, s))
         out["pr_auc"] = float(average_precision_score(y, s))

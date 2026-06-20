@@ -70,11 +70,48 @@ with st.sidebar:
         list(ALL_DETECTORS.keys()),
         default=_default_models,
     )
-    contamination = st.slider("이상 비율 (threshold 분위수)", 0.01, 0.20, 0.05, 0.01)
+
+    threshold_method = st.radio(
+        "임계값 방식",
+        ["topk", "mad"],
+        index=0,
+        format_func=lambda m: {
+            "topk": "고정 비율 (top-k)",
+            "mad": "데이터 적응형 (MAD)",
+        }[m],
+        help=(
+            "top-k: 항상 이상 비율만큼 플래그. "
+            "MAD: 점수 분포에서 통계적으로 벗어난 점만 플래그 → 이상 개수가 데이터에 따라 달라짐."
+        ),
+    )
+    contamination = st.slider(
+        "이상 비율 (top-k일 때 플래그 비율 / MAD일 때 모델 내부 파라미터)",
+        0.01, 0.20, 0.05, 0.01,
+    )
+    mad_k = st.slider("MAD 민감도 (작을수록 더 많이 탐지)", 2.0, 6.0, 3.5, 0.5)
 
     with st.expander("고급 설정"):
+        split_eval = st.checkbox(
+            "학습/탐지 구간 분리 (holdout)", value=False,
+            help="앞부분을 '정상' 학습 구간으로 보고 모델·스케일러·임계값을 적합한 뒤, "
+                 "뒷부분(탐지 구간)을 out-of-sample로 평가합니다. 데이터 누수를 줄입니다.",
+        )
+        train_ratio = st.slider(
+            "학습 구간 비율", 0.3, 0.9, 0.5, 0.05, disabled=not split_eval
+        )
+        use_temporal = st.checkbox(
+            "시간 특징 사용 (ML 모델에 lag/rolling 추가)", value=True,
+            help="Isolation Forest/LOF/OC-SVM이 시점 순서를 활용하도록 시차·이동통계 특징을 추가합니다.",
+        )
         rolling_window = st.slider("Rolling Z 윈도우", 5, 200, 30)
-        seasonal_period = st.slider("STL 계절 주기", 2, 365, 24)
+        arima_auto = st.checkbox(
+            "ARIMA 차수 자동 선택 (AIC)", value=False,
+            help="(1,1,1) 고정 대신 작은 후보 격자에서 컬럼별로 AIC 최소 차수를 선택합니다. 느려질 수 있습니다.",
+        )
+        stl_auto_period = st.checkbox("STL 주기 자동 추정 (ACF)", value=False)
+        seasonal_period = st.slider(
+            "STL 계절 주기", 2, 365, 24, disabled=stl_auto_period
+        )
 
     run_button = st.button("🚀 이상탐지 실행", type="primary", use_container_width=True)
 
@@ -124,14 +161,29 @@ def _run(
     scaling: str,
     selected_models: tuple,
     contamination: float,
+    threshold_method: str,
+    mad_k: float,
+    use_temporal: bool,
     rolling_window: int,
     seasonal_period: int,
+    stl_auto_period: bool,
+    split_eval: bool,
+    train_ratio: float,
+    arima_auto: bool,
     _df: pd.DataFrame,
 ):
     X_raw = _df[list(numeric_cols)]
-    X = preprocess_pipeline(
-        X_raw, fill=fill_method, value_transform=value_transform, scaling=scaling
+    X, n_train = preprocess_pipeline(
+        X_raw,
+        fill=fill_method,
+        value_transform=value_transform,
+        scaling=scaling,
+        train_ratio=train_ratio if split_eval else 1.0,
     )
+    # n_train passed to detectors only when a real holdout is requested
+    fit_n_train = n_train if (split_eval and n_train < len(X)) else None
+
+    ml_models = {"Isolation Forest", "LOF", "One-Class SVM"}
 
     scores_by_model: dict = {}
     preds_by_model: dict = {}
@@ -139,18 +191,26 @@ def _run(
 
     for name in selected_models:
         cls = ALL_DETECTORS[name]
-        kwargs: dict = {"contamination": contamination}
+        kwargs: dict = {
+            "contamination": contamination,
+            "threshold_method": threshold_method,
+            "mad_k": mad_k,
+        }
         if name == "Rolling Z-Score":
             kwargs["window"] = rolling_window
         if name == "STL":
-            kwargs["period"] = seasonal_period
+            kwargs["period"] = "auto" if stl_auto_period else seasonal_period
+        if name == "ARIMA" and arima_auto:
+            kwargs["order"] = "auto"
+        if name in ml_models:
+            kwargs["use_temporal"] = use_temporal
         det = cls(**kwargs)
-        result = det.detect(X)
+        result = det.detect(X, n_train=fit_n_train)
         scores_by_model[name] = result.scores
         preds_by_model[name] = result.predictions
         thresholds[name] = result.threshold
 
-    return X, scores_by_model, preds_by_model, thresholds
+    return X, scores_by_model, preds_by_model, thresholds, fit_n_train
 
 
 if not selected_models:
@@ -161,7 +221,7 @@ if not selected_models:
 # when nothing changed and always returns results matching the current
 # selection — avoiding stale session_state keyed on a previous model set.
 with st.spinner("이상탐지 수행 중..."):
-    X, scores_by_model, preds_by_model, thresholds = _run(
+    X, scores_by_model, preds_by_model, thresholds, n_train = _run(
         data.file_hash,
         tuple(data.numeric_cols),
         fill_method,
@@ -169,9 +229,24 @@ with st.spinner("이상탐지 수행 중..."):
         scaling,
         tuple(selected_models),
         contamination,
+        threshold_method,
+        mad_k,
+        use_temporal,
         rolling_window,
         seasonal_period,
+        stl_auto_period,
+        split_eval,
+        train_ratio,
+        arima_auto,
         data.df,
+    )
+
+# timestamp marking the train/detection boundary (None when no holdout)
+split_x = X.index[n_train] if (n_train is not None and n_train < len(X)) else None
+if split_x is not None:
+    st.caption(
+        f"🔎 학습/탐지 분리 활성화: 앞 {n_train}개 시점으로 적합, "
+        f"이후 {len(X) - n_train}개 시점을 out-of-sample 탐지 (경계: {split_x})."
     )
 
 
@@ -188,13 +263,14 @@ with tabs[0]:
         X,
         preds_by_model[model_for_overview],
         title=f"{model_for_overview}: 탐지된 이상점 = {int(preds_by_model[model_for_overview].sum())}",
+        split_x=split_x,
     )
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Scores tab ---
 with tabs[1]:
     st.subheader("모델별 Anomaly Score")
-    st.plotly_chart(score_timeseries(scores_by_model, thresholds), use_container_width=True)
+    st.plotly_chart(score_timeseries(scores_by_model, thresholds, split_x=split_x), use_container_width=True)
     st.plotly_chart(score_distribution(scores_by_model), use_container_width=True)
 
     st.subheader("점수 요약 통계")
@@ -220,15 +296,41 @@ with tabs[2]:
 
 # --- Metrics tab ---
 with tabs[3]:
+    # value_transform (diff/logreturn) can drop leading rows, so X may be
+    # shorter than the original labels. Align labels to the rows that survived
+    # preprocessing before computing any metric.
+    labels = None
     if data.labels is not None:
+        labels = data.labels.reindex(X.index).dropna().astype(int)
+        if labels.empty:
+            labels = None
+
+    # when a holdout is active, report metrics on the detection (test) slice
+    # only — training-period metrics would be optimistic.
+    eval_index = X.index if split_x is None else X.index[n_train:]
+    if labels is not None:
+        labels = labels.reindex(eval_index).dropna().astype(int)
+        if labels.empty:
+            labels = None
+
+    if labels is not None:
         st.subheader("지도학습 평가지표 (label 컬럼 감지됨)")
+        if split_x is not None:
+            st.caption(f"⚠️ 지표는 탐지 구간(out-of-sample, {len(labels)}개 시점)에서만 계산됩니다.")
+        st.caption(
+            "pa_* 는 point-adjusted 지표입니다: 실제 이상 구간 안에서 한 시점이라도 "
+            "탐지하면 그 구간 전체를 탐지한 것으로 간주합니다 (시계열 표준). "
+            "events 는 탐지한 이상 구간 수 / 전체 이상 구간 수."
+        )
         rows = []
         roc_data, pr_data = {}, {}
         for name in selected_models:
-            m = supervised_metrics(data.labels, scores_by_model[name], preds_by_model[name])
+            sc = scores_by_model[name].reindex(labels.index)
+            pr = preds_by_model[name].reindex(labels.index).fillna(0).astype(int)
+            m = supervised_metrics(labels, sc, pr)
             rows.append({"model": name, **m})
-            roc_data[name] = roc_points(data.labels, scores_by_model[name])
-            pr_data[name] = pr_points(data.labels, scores_by_model[name])
+            roc_data[name] = roc_points(labels, sc)
+            pr_data[name] = pr_points(labels, sc)
         st.dataframe(pd.DataFrame(rows).set_index("model"), use_container_width=True)
         c1, c2 = st.columns(2)
         with c1:
