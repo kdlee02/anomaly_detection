@@ -90,8 +90,59 @@ def synthetic_unlabeled(n: int = 1000, seed: int = 2):
     return df
 
 
+def synthetic_showcase(n: int = 2000, seed: int = 7):
+    """Detector-friendly dataset: correlated signals with clearly injected,
+    event-style anomalies of the kinds the current models handle well.
+
+    4 sensors are driven by a shared latent factor ``z`` (trend + seasonality),
+    so they are strongly correlated -> PCA reconstruction error is ~0 normally
+    and spikes on a *correlation break*. Anomalies are contiguous segments
+    (events), so point-adjusted / event metrics are meaningful too.
+    """
+    rng = np.random.default_rng(seed)
+    t = np.arange(n)
+
+    # shared latent driver + per-sensor seasonality => correlated sensors
+    z = 0.0006 * t + np.sin(2 * np.pi * t / 120)
+    s1 = 2.0 * z + 0.30 * np.sin(2 * np.pi * t / 24) + rng.normal(0, 0.15, n)
+    s2 = 1.5 * z + rng.normal(0, 0.15, n)
+    s3 = -1.0 * z + 0.20 * np.cos(2 * np.pi * t / 48) + rng.normal(0, 0.15, n)
+    s4 = 1.0 * z + rng.normal(0, 0.15, n)
+    cols = {"sensor_a": s1, "sensor_b": s2, "sensor_c": s3, "sensor_d": s4}
+    df = pd.DataFrame(cols, index=_make_dates(n))
+    label = np.zeros(n, dtype=int)
+
+    # well-separated anomaly events: (start, length, type)
+    events = [
+        (180, 1, "spike"), (430, 2, "spike"),
+        (640, 10, "level"), (1480, 12, "level"),
+        (880, 8, "variance"), (1700, 8, "variance"),
+        (1080, 12, "corr_break"), (1320, 10, "corr_break"),
+        (300, 1, "spike"), (1900, 6, "variance"),
+    ]
+    sensors = list(cols.keys())
+    for start, length, kind in events:
+        sl = slice(start, start + length)
+        col = sensors[rng.integers(0, len(sensors))]
+        if kind == "spike":
+            df.loc[df.index[sl], col] += rng.choice([-1, 1]) * rng.uniform(5, 9)
+        elif kind == "level":
+            df.loc[df.index[sl], col] += rng.choice([-1, 1]) * rng.uniform(3, 5)
+        elif kind == "variance":
+            df.loc[df.index[sl], col] += rng.normal(0, 3.0, size=length)
+        elif kind == "corr_break":
+            # decouple sensor_c from the latent factor -> breaks correlation
+            df.loc[df.index[sl], "sensor_c"] = rng.normal(0, 0.3, size=length)
+        label[sl] = 1
+
+    df["label"] = label
+    df.index.name = "timestamp"
+    return df
+
+
 if __name__ == "__main__":
     synthetic_sensors().to_csv(OUT / "sensors_labeled.csv")
     synthetic_market().to_csv(OUT / "market_ohlcv_labeled.csv")
     synthetic_unlabeled().to_csv(OUT / "weather_unlabeled.csv")
+    synthetic_showcase().to_csv(OUT / "showcase_labeled.csv")
     print("samples written to", OUT)
