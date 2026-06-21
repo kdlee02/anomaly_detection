@@ -368,6 +368,10 @@ with tabs[3]:
             "**③ 점수 분포 + 임계값** — 임계값 오른쪽에 별도의 봉우리(이봉)가 보이면 이상점이 본체에서 잘 분리된 신호입니다."
         )
         st.plotly_chart(score_hist_with_threshold(scores_by_model, thresholds), use_container_width=True)
+        # trailing spacer: gives a non-chart area at the bottom so the page can
+        # be scrolled past the last Plotly chart (charts otherwise capture the
+        # mouse wheel, making it feel like the page is stuck).
+        st.markdown("<div style='height:120px'></div>", unsafe_allow_html=True)
 
 # --- Details tab ---
 with tabs[4]:
