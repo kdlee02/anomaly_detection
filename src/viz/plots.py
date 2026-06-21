@@ -1,6 +1,7 @@
 """Plotly visualizations for the anomaly detection dashboard."""
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -82,6 +83,95 @@ def agreement_heatmap(mat: pd.DataFrame) -> go.Figure:
         aspect="auto",
     )
     fig.update_layout(title="Model Agreement (Jaccard)", height=400)
+    return fig
+
+
+def consensus_timeline(preds_by_model: dict[str, pd.Series]) -> go.Figure:
+    """How many models flag each timestamp (label-free confidence signal).
+
+    With no ground truth, points that several independent detectors agree on
+    are the most trustworthy anomalies; a lone-model flag is more likely noise.
+    """
+    pred_df = pd.DataFrame(preds_by_model)
+    consensus = pred_df.sum(axis=1)
+    n_models = pred_df.shape[1]
+    fig = go.Figure(
+        go.Bar(
+            x=consensus.index,
+            y=consensus.values,
+            marker=dict(color=consensus.values, colorscale="Reds", cmin=0, cmax=n_models),
+        )
+    )
+    fig.update_layout(
+        title=f"모델 합의: 동시에 이상으로 판단한 모델 수 (최대 {n_models})",
+        yaxis_title="플래그한 모델 수",
+        yaxis=dict(dtick=1, range=[0, n_models]),
+        height=300,
+        hovermode="x unified",
+    )
+    return fig
+
+
+def sorted_score_curve(
+    scores_by_model: dict[str, pd.Series], thresholds: dict[str, float]
+) -> go.Figure:
+    """Scores sorted high→low (per-model min-max normalized) with the cutoff.
+
+    A sharp elbow means normal and anomalous points separate cleanly, so the
+    threshold sits in a natural gap; a smooth ramp means the cut is arbitrary.
+    The ✕ marks where each model's threshold falls along its own curve.
+    """
+    fig = go.Figure()
+    palette = px.colors.qualitative.Plotly
+    for i, (name, s) in enumerate(scores_by_model.items()):
+        color = palette[i % len(palette)]
+        v = np.sort(np.asarray(s.values, dtype=float))[::-1]
+        lo, hi = float(v.min()), float(v.max())
+        norm = (v - lo) / (hi - lo) if hi > lo else np.zeros_like(v)
+        rank = np.arange(1, len(v) + 1)
+        fig.add_trace(go.Scatter(x=rank, y=norm, mode="lines", name=name, line=dict(color=color)))
+        thr = thresholds.get(name)
+        if thr is not None and hi > lo:
+            n_above = int((np.asarray(s.values, dtype=float) > thr).sum())
+            if 0 < n_above <= len(v):
+                fig.add_trace(go.Scatter(
+                    x=[n_above], y=[(thr - lo) / (hi - lo)],
+                    mode="markers", marker=dict(symbol="x", size=11, color=color),
+                    name=f"{name} cut", showlegend=False,
+                ))
+    fig.update_layout(
+        title="정렬된 이상 점수 (정규화) — 꺾임(elbow)이 뚜렷할수록 분리 양호",
+        xaxis_title="순위 (높은 점수 → 낮은 점수)",
+        yaxis_title="정규화 점수",
+        height=350,
+        hovermode="x unified",
+    )
+    return fig
+
+
+def score_hist_with_threshold(
+    scores_by_model: dict[str, pd.Series], thresholds: dict[str, float]
+) -> go.Figure:
+    """Overlaid score histograms with each model's threshold as a dotted line.
+
+    A bimodal distribution (a separate right-hand bump past the threshold)
+    means anomalies stand apart from the bulk; a single smooth mode means the
+    threshold is slicing through ordinary points.
+    """
+    fig = go.Figure()
+    palette = px.colors.qualitative.Plotly
+    for i, (name, s) in enumerate(scores_by_model.items()):
+        color = palette[i % len(palette)]
+        fig.add_trace(go.Histogram(x=s.values, name=name, opacity=0.5, nbinsx=50, marker_color=color))
+        thr = thresholds.get(name)
+        if thr is not None:
+            fig.add_vline(x=float(thr), line_dash="dot", line_color=color)
+    fig.update_layout(
+        barmode="overlay",
+        title="점수 분포 + 임계값 — 이봉(bimodal)일수록 이상이 뚜렷",
+        xaxis_title="anomaly score",
+        height=350,
+    )
     return fig
 
 

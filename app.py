@@ -19,10 +19,13 @@ from src.evaluation.metrics import (
 from src.models import ALL_DETECTORS
 from src.viz.plots import (
     agreement_heatmap,
+    consensus_timeline,
     pr_curve_fig,
     roc_curve_fig,
     score_distribution,
+    score_hist_with_threshold,
     score_timeseries,
+    sorted_score_curve,
     timeseries_with_anomalies,
 )
 
@@ -344,6 +347,27 @@ with tabs[3]:
         )
         rows = [{"model": n, **score_summary(s)} for n, s in scores_by_model.items()]
         st.dataframe(pd.DataFrame(rows).set_index("model"), use_container_width=True)
+
+        st.subheader("비지도 진단 시각화")
+        st.caption("정답 라벨이 없을 때 탐지 결과의 신뢰도를 간접적으로 판단하는 그림입니다.")
+
+        if len(selected_models) >= 2:
+            st.markdown(
+                "**① 모델 합의 타임라인** — 여러 모델이 공통으로 잡은 시점일수록 실제 이상일 가능성이 높습니다."
+            )
+            st.plotly_chart(consensus_timeline(preds_by_model), use_container_width=True)
+        else:
+            st.info("모델을 2개 이상 선택하면 '모델 합의 타임라인'이 표시됩니다.")
+
+        st.markdown(
+            "**② 정렬된 점수 곡선** — 곡선에 뚜렷한 꺾임(elbow)이 있으면 정상/이상이 잘 분리된 것입니다. ✕는 임계값 지점."
+        )
+        st.plotly_chart(sorted_score_curve(scores_by_model, thresholds), use_container_width=True)
+
+        st.markdown(
+            "**③ 점수 분포 + 임계값** — 임계값 오른쪽에 별도의 봉우리(이봉)가 보이면 이상점이 본체에서 잘 분리된 신호입니다."
+        )
+        st.plotly_chart(score_hist_with_threshold(scores_by_model, thresholds), use_container_width=True)
 
 # --- Details tab ---
 with tabs[4]:
