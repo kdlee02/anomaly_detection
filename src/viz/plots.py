@@ -19,11 +19,11 @@ def timeseries_with_anomalies(
     fig = make_subplots(rows=len(cols), cols=1, shared_xaxes=True, subplot_titles=cols)
     anomaly_idx = predictions[predictions == 1].index
 
-    # all feature lines share one neutral color so the only highlighted thing
-    # is the anomaly marker; otherwise plotly's default palette makes the 2nd
-    # feature line red and it collides with the (formerly red) anomaly markers.
+    # all feature lines share one neutral color so the red anomaly markers are
+    # the only highlighted thing; without this, plotly's default palette makes
+    # the 2nd feature line red and it would collide with the markers.
     line_color = "#1f77b4"      # steel blue, matches the app theme
-    anomaly_color = "#FF8C00"   # dark orange — distinct, not red
+    anomaly_color = "red"       # anomalies stand out in red against blue lines
     for i, col in enumerate(cols, start=1):
         fig.add_trace(
             go.Scatter(
@@ -38,7 +38,7 @@ def timeseries_with_anomalies(
                     x=anomaly_idx,
                     y=df.loc[anomaly_idx, col],
                     mode="markers",
-                    marker=dict(color=anomaly_color, size=9, symbol="x", line=dict(width=1)),
+                    marker=dict(color=anomaly_color, size=8, symbol="circle"),
                     name="anomaly",
                     showlegend=(i == 1),
                 ),
